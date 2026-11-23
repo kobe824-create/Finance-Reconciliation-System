@@ -49,6 +49,7 @@ export const demoAuditLog: AuditEntry[] = [
 ];
 
 export const demoWorkspace: WorkspaceData = {
+  organization: { id: "demo-ddin", slug: "ddin", name: "DDIN", legalName: "DDIN", tagline: "Network of the Best", country: "Rwanda", logoUrl: "/ddin-logo.png" },
   accounts: demoAccounts,
   users: demoUsers,
   reconciliations: demoReconciliations,

@@ -33,7 +33,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const [file] = await sql`SELECT f.reconciliation_id::text, f.source::text, f.row_count, f.import_complete,
         r.status::text, a.currency
       FROM source_files f JOIN reconciliations r ON r.id = f.reconciliation_id JOIN accounts a ON a.id = r.account_id
-      WHERE f.id = ${sourceFileId}`;
+      WHERE f.id = ${sourceFileId} AND a.organization_id = ${actor.organizationId}`;
     if (!file) throw Object.assign(new Error("Source file not found."), { status: 404 });
     if (file.import_complete) throw Object.assign(new Error("This statement import is already complete."), { status: 409 });
     if (file.status === "approved" || file.status === "in_review") throw Object.assign(new Error("This reconciliation is locked while it is in review or approved."), { status: 409 });
@@ -58,7 +58,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (Number(count.rows) !== totalRows) throw Object.assign(new Error("A transaction batch is missing. Retry the missing rows before finishing this import."), { status: 409 });
       await sql.transaction([
         sql`UPDATE source_files SET import_complete = TRUE WHERE id = ${sourceFileId}`,
-        auditStatement(sql, actor.id, "Completed statement import", "source_file", sourceFileId, { reconciliationId, rows: totalRows, source: file.source }),
+        auditStatement(sql, actor.id, "Completed statement import", "source_file", sourceFileId, { reconciliationId, rows: totalRows, source: file.source }, actor.organizationId),
       ]);
     }
     return Response.json({ accepted: normalized.length, importComplete: finalChunk });

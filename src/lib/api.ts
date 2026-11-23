@@ -15,10 +15,10 @@ export async function requestJson<T>(request: Request): Promise<T> {
   }
 }
 
-export async function writeAudit(sql: ReturnType<typeof import("@/lib/db").getDb>, actorId: string, action: string, entityType: string, entityId: string, details: Record<string, unknown> = {}) {
-  await sql`INSERT INTO audit_log (actor_id, action, entity_type, entity_id, details) VALUES (${actorId}, ${action}, ${entityType}, ${entityId}, ${JSON.stringify(details)}::jsonb)`;
+export async function writeAudit(sql: ReturnType<typeof import("@/lib/db").getDb>, actorId: string, action: string, entityType: string, entityId: string, details: Record<string, unknown> = {}, organizationId: string | null = null) {
+  await sql`INSERT INTO audit_log (organization_id, actor_id, action, entity_type, entity_id, details) VALUES (${organizationId}, ${actorId}, ${action}, ${entityType}, ${entityId}, ${JSON.stringify(details)}::jsonb)`;
 }
 
-export function auditStatement(sql: ReturnType<typeof import("@/lib/db").getDb>, actorId: string, action: string, entityType: string, entityId: string, details: Record<string, unknown> = {}) {
-  return sql`INSERT INTO audit_log (actor_id, action, entity_type, entity_id, details) VALUES (${actorId}, ${action}, ${entityType}, ${entityId}, ${JSON.stringify(details)}::jsonb)`;
+export function auditStatement(sql: ReturnType<typeof import("@/lib/db").getDb>, actorId: string, action: string, entityType: string, entityId: string, details: Record<string, unknown> = {}, organizationId: string | null = null) {
+  return sql`INSERT INTO audit_log (organization_id, actor_id, action, entity_type, entity_id, details) VALUES (${organizationId}, ${actorId}, ${action}, ${entityType}, ${entityId}, ${JSON.stringify(details)}::jsonb)`;
 }

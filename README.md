@@ -1,6 +1,6 @@
 # DDIN Finance Reconciliation
 
-A single-project Next.js and TypeScript finance workspace for monthly bank-to-ledger reconciliation. The web interface, API routes, session handling, and Neon data access run from one Vercel project. There is no separately hosted backend.
+A single-project Next.js and TypeScript finance workspace for monthly bank-to-ledger reconciliation. The web interface, API routes, session handling, and Neon data access run from one Vercel project. One platform administrator can choose among organization portals; each portal has its own company profile, logo, finance users, accounts, reconciliation history, and audit records.
 
 ## Included
 
@@ -8,6 +8,7 @@ A single-project Next.js and TypeScript finance workspace for monthly bank-to-le
 - Client-side parsing and preview, transaction date/amount normalization, SHA-256 checksums, and original-file retention in Neon PostgreSQL.
 - Conservative one-to-one matching by exact amount plus normalized reference, or exact amount plus a similar description on the same posting date. Other rows stay in the exception queue for review and manual matching.
 - Role-based access for administrators, preparers, reviewers, and auditors. A preparer cannot approve their own reconciliation; approval requires no unmatched transactions and equal statement and ledger closing balances.
+- A platform super administrator signs in once with a username and password, chooses a portal, and can create organization profiles. Organization users and finance records are scoped to their company. Company display name, legal name, logo, and address can be updated from **Team & settings**.
 - Review return notes, period-based account reports, CSV export, browser print-to-PDF, searchable history, and append-only database audit events.
 - A local demo workspace with sample records. Without `DATABASE_URL`, demo changes stay in that browser's local storage and no credentials are required.
 
@@ -17,8 +18,8 @@ Use Node.js 24.x. For real data, create a Neon project and use its pooled Postgr
 
 1. Copy `.env.example` to `.env.local`.
 2. Set `DATABASE_URL` and generate `AUTH_SECRET` with `openssl rand -base64 48`.
-3. Choose a first-admin name, email, and temporary password of at least 12 characters in the `BOOTSTRAP_ADMIN_*` values.
-4. Install packages, apply the schema, and create the first administrator:
+3. Choose a platform-admin name, email, optional username (email is used by default), and password of at least 12 characters in the `BOOTSTRAP_*` values.
+4. Install packages, apply the schema, and create the platform administrator:
 
    ```bash
    npm install
@@ -26,13 +27,13 @@ Use Node.js 24.x. For real data, create a Neon project and use its pooled Postgr
    npm run db:seed-admin
    ```
 
-5. Remove `BOOTSTRAP_ADMIN_PASSWORD` from `.env.local` after the first administrator is created, then start the application:
+5. Remove `BOOTSTRAP_ADMIN_PASSWORD` from `.env.local` after the platform administrator is created, then start the application:
 
    ```bash
    npm run dev
    ```
 
-Open `http://localhost:3000` and sign in with the first-admin email and password. `db:seed-admin` is intentionally one-time and refuses to run once any user exists. It also creates three masked sample bank-account records; add the company's real accounts from **Team & settings**.
+Open `http://localhost:3000` and sign in with the platform administrator username (or email) and password. `db:seed-admin` creates the initial administrator or promotes the matching configured account; run it only when intentionally setting up or rotating bootstrap access. The DDIN portal is initialized with the supplied DDIN logo and profile, without fictitious bank accounts. Add real finance users and accounts from **Team & settings** after opening the DDIN portal.
 
 To use the sample workspace without a database, leave `DATABASE_URL` unset and run `npm run dev`. If `DATABASE_URL` is present, the application requires a configured database and a seeded user.
 
@@ -48,6 +49,7 @@ Original files are retained in Neon rather than Vercel's temporary function file
 
 | Role | Access |
 | --- | --- |
+| Platform super administrator | Create/select organization portals and manage each portal profile |
 | Administrator | Manage users and accounts; prepare and review periods |
 | Preparer | Create reconciliations, import sources, and match transactions |
 | Reviewer | Independently approve or return periods in review |
@@ -58,8 +60,8 @@ Submission requires at least one completed bank file and one completed ledger fi
 ## Vercel deployment
 
 1. Push this folder to a Git repository and import it into Vercel. Vercel detects the Next.js project and uses the Next.js build defaults.
-2. Create or connect a Neon database. Run the schema migration once from a local terminal connected to the production Neon database: `npm run db:migrate`.
-3. Create the first administrator once against that database with `npm run db:seed-admin`. Do not add the bootstrap password to Vercel; remove it from the local environment after the account is created.
+2. Create or connect a Neon database. Run the schema migrations once from a local terminal connected to the production Neon database: `npm run db:migrate`.
+3. Create the platform super administrator once against that database with `npm run db:seed-admin`. Do not add the bootstrap password to Vercel; remove it from the local environment after the account is created.
 4. Add `DATABASE_URL` and a unique `AUTH_SECRET` in the Vercel project settings for Preview and Production as appropriate. Redeploy after changing environment variables.
 5. Deploy from the Vercel dashboard or run `npx vercel --prod` from this project directory.
 
@@ -72,8 +74,8 @@ npm run dev          # local development
 npm run lint         # static lint checks
 npm test             # matching and normalization unit tests
 npm run build        # production build
-npm run db:migrate   # apply the initial SQL schema once
-npm run db:seed-admin # create the first administrator once
+npm run db:migrate   # apply sequential schema migrations
+npm run db:seed-admin # create or promote the platform administrator
 ```
 
 ## Current limits before a production rollout

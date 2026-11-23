@@ -1,15 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import Image from "next/image";
 import { Activity, AlertCircle, ChevronRight, ClipboardCheck, FileClock, FileSpreadsheet, FileText, LayoutDashboard, ListChecks, LogOut, Menu, Search, Settings2, ShieldCheck } from "lucide-react";
 import ImportDialog, { type ImportSubmission } from "@/components/import-dialog";
+import PortalChooser from "@/components/portal-chooser";
 import {
   AuditView, ExceptionsView, ImportsView, OverviewView, ReconciliationsView, ReportsView, TeamView,
-  type CreateAccountPayload, type CreateUserPayload, type ViewKey, type WorkflowAction,
+  type CreateAccountPayload, type CreateUserPayload, type OrganizationProfilePayload, type ViewKey, type WorkflowAction,
 } from "@/components/workspace-views";
 import { demoWorkspace } from "@/lib/demo-data";
 import { matchTransactions } from "@/lib/reconciliation";
-import type { Account, AppUser, AuditEntry, Reconciliation, SourceFile, StatementTransaction, WorkspaceData } from "@/lib/types";
+import type { Account, AppUser, AuditEntry, OrganizationSummary, Reconciliation, SourceFile, StatementTransaction, WorkspaceData } from "@/lib/types";
 
 type Props = { databaseConfigured: boolean };
 type Notice = { message: string; error?: boolean };
@@ -33,20 +35,20 @@ function transactionCounts(transactions: StatementTransaction[], reconciliationI
   return { matchedCount: matched, unmatchedBankCount: rows.filter((item) => item.source === "bank" && !item.matchId).length, unmatchedLedgerCount: rows.filter((item) => item.source === "ledger" && !item.matchId).length };
 }
 
-function LoginScreen({ onLogin }: { onLogin: (email: string, password: string) => Promise<void> }) {
-  const [email, setEmail] = useState("");
+function LoginScreen({ onLogin }: { onLogin: (username: string, password: string) => Promise<void> }) {
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError("");
-    try { await onLogin(email, password); } catch (cause) { setError(cause instanceof Error ? cause.message : "Sign-in could not be completed."); }
+    try { await onLogin(username, password); } catch (cause) { setError(cause instanceof Error ? cause.message : "Sign-in could not be completed."); }
     finally { setBusy(false); }
   }
   return <div className="login-screen">
-    <aside className="login-aside"><div className="login-brand"><span className="login-brand-mark">DDIN</span><div><strong>DDIN FINANCE</strong><small>Reconciliation workspace</small></div></div><div className="login-copy"><div className="eyebrow">Finance operations</div><h1>Clear records.<br />Confident close.</h1><p>A controlled workspace for statement imports, transaction review, independent approvals, and period reporting.</p></div><div className="login-foot">Development, preview, and production access is managed by your DDIN administrator.</div></aside>
-    <div className="login-form-side"><form className="login-form" onSubmit={submit}><h2>Sign in to DDIN Finance</h2><p>Use your assigned finance account to continue.</p>
-      <div className="field"><label htmlFor="login-email">Email address</label><input id="login-email" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@ddin.rw" required /></div>
+    <aside className="login-aside"><div className="login-brand"><span className="login-brand-mark"><Image src="/ddin-logo.png" width={160} height={160} alt="DDIN" /></span><div><strong>FINANCE PORTALS</strong><small>Reconciliation workspace</small></div></div><div className="login-copy"><div className="eyebrow">Finance operations</div><h1>Clear records.<br />Confident close.</h1><p>A controlled workspace for statement imports, transaction review, independent approvals, and period reporting.</p></div><div className="login-foot">Access is managed by your organization administrator.</div></aside>
+    <div className="login-form-side"><form className="login-form" onSubmit={submit}><h2>Sign in to Finance</h2><p>Use your assigned finance account to continue.</p>
+      <div className="field"><label htmlFor="login-username">Username or email</label><input id="login-username" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Your assigned username" required /></div>
       <div className="field"><label htmlFor="login-password">Password</label><input id="login-password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></div>
       {error && <div className="callout warning" style={{ marginTop: 12 }}><AlertCircle size={14} />{error}</div>}
       <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}<ChevronRight size={14} /></button>
@@ -66,7 +68,7 @@ function Sidebar({ view, onNavigate, data, open, onClose, currentUser }: { view:
   return <>
     <div className={`mobile-backdrop ${open ? "show" : ""}`} onClick={onClose} />
     <aside className={`sidebar ${open ? "open" : ""}`}>
-      <div className="brand-lockup"><div className="brand-mark"><span className="brand-monogram">DDIN</span></div><div><div className="brand-name">DDIN FINANCE</div><div className="brand-caption">Reconciliation office</div></div></div>
+      <div className="brand-lockup"><div className="brand-mark">{data.organization.logoUrl ? <Image src={data.organization.logoUrl} alt="" width={160} height={160} unoptimized /> : <span className="brand-monogram">{data.organization.name.slice(0, 4).toUpperCase()}</span>}</div><div><div className="brand-name">{data.organization.name.toUpperCase()} FINANCE</div><div className="brand-caption">Reconciliation office</div></div></div>
       <nav className="nav-wrap">{groups.map((group) => <div className="nav-group" key={group.label}><div className="nav-label">{group.label}</div>{group.items.map((item) => <button key={item.id} className={`nav-link ${view === item.id ? "active" : ""}`} onClick={() => { onNavigate(item.id); onClose(); }}><item.icon size={15} strokeWidth={1.8} /><span>{labels[item.id]}</span>{item.count ? <span className="nav-count">{item.count > 99 ? "99+" : item.count}</span> : null}</button>)}</div>)}</nav>
       <div className="sidebar-bottom"><div className="close-progress"><div className="close-progress-head"><span>November close</span><span>{openItems ? `${Math.max(0, Math.round(100 - openItems * 12))}%` : "100%"}</span></div><div className="close-progress-sub">{openItems ? `${openItems} transactions need attention` : "All current periods are clear"}</div><div className="progress-track"><div className="progress-fill" style={{ width: `${openItems ? Math.max(12, 100 - openItems * 12) : 100}%` }} /></div></div><div className="user-card"><span className="avatar">{initials(currentUser.name)}</span><div className="user-card-copy"><div className="user-card-name">{currentUser.name}</div><div className="user-card-role">{currentUser.role}</div></div><ShieldCheck size={14} color="#8591a6" /></div></div>
     </aside>
@@ -76,6 +78,7 @@ function Sidebar({ view, onNavigate, data, open, onClose, currentUser }: { view:
 export default function FinanceWorkspace({ databaseConfigured }: Props) {
   const [workspace, setWorkspace] = useState<WorkspaceData>(demoWorkspace);
   const [user, setUser] = useState<AppUser | null>(databaseConfigured ? null : demoWorkspace.users[0]);
+  const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
   const [view, setView] = useState<ViewKey>("overview");
   const [selectedReconciliationId, setSelectedReconciliationId] = useState("");
   const [searchText, setSearchText] = useState("");
@@ -109,11 +112,14 @@ export default function FinanceWorkspace({ databaseConfigured }: Props) {
     }
     (async () => {
       try {
-        const session = await apiRequest<{ user: AppUser | null }>("/api/auth/me");
+        const session = await apiRequest<{ user: AppUser | null; organizations: OrganizationSummary[] }>("/api/auth/me");
         if (session.user) {
           if (alive) setUser(session.user);
-          const data = await apiRequest<{ data: WorkspaceData }>("/api/workspace");
-          if (alive) setWorkspace(data.data);
+          if (alive) setOrganizations(session.organizations ?? []);
+          if (session.user.organizationId) {
+            const data = await apiRequest<{ data: WorkspaceData }>("/api/workspace");
+            if (alive) setWorkspace(data.data);
+          }
         }
       } catch (error) {
         if (alive) setNotice({ message: error instanceof Error ? error.message : "The workspace could not be loaded.", error: true });
@@ -131,19 +137,45 @@ export default function FinanceWorkspace({ databaseConfigured }: Props) {
     return () => window.clearTimeout(timeout);
   }, [notice]);
 
-  async function login(email: string, password: string) {
-    const result = await apiRequest<{ user: AppUser }>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+  async function login(username: string, password: string) {
+    const result = await apiRequest<{ user: AppUser }>("/api/auth/login", { method: "POST", body: JSON.stringify({ username, password }) });
     setUser(result.user);
+    if (result.user.platformAdmin && !result.user.organizationId) {
+      const directory = await apiRequest<{ organizations: OrganizationSummary[] }>("/api/auth/me");
+      setOrganizations(directory.organizations ?? []);
+      setNotice({ message: `Welcome back, ${result.user.name}.` });
+      return;
+    }
     const data = await refreshWorkspace();
     const current = data.users.find((item) => item.id === result.user.id) ?? result.user;
     setUser(current);
     setNotice({ message: `Welcome back, ${current.name}.` });
   }
 
+  async function selectOrganization(organizationId: string) {
+    const result = await apiRequest<{ user: AppUser }>("/api/auth/select-organization", { method: "POST", body: JSON.stringify({ organizationId }) });
+    setUser(result.user);
+    await refreshWorkspace();
+    const organization = organizations.find((item) => item.id === organizationId);
+    setNotice({ message: `${organization?.name ?? "Organization"} portal opened.` });
+  }
+
+  async function createOrganization(profile: OrganizationProfilePayload) {
+    const result = await apiRequest<{ organization: OrganizationSummary }>("/api/organizations", { method: "POST", body: JSON.stringify(profile) });
+    setOrganizations((current) => [...current, result.organization].sort((a, b) => a.name.localeCompare(b.name)));
+    await selectOrganization(result.organization.id);
+  }
+
+  async function switchToPortalDirectory() {
+    const result = await apiRequest<{ user: AppUser }>("/api/auth/select-organization", { method: "POST", body: JSON.stringify({ organizationId: null }) });
+    setUser(result.user);
+    setWorkspace(demoWorkspace);
+  }
+
   async function logout() {
     if (databaseConfigured) await apiRequest("/api/auth/logout", { method: "POST" });
     setUser(isDemo ? demoWorkspace.users[0] : null);
-    setWorkspace(isDemo ? demoWorkspace : { accounts: [], users: [], reconciliations: [], transactions: [], sourceFiles: [], auditLog: [] });
+    setWorkspace(demoWorkspace);
     setView("overview");
     setNotice({ message: isDemo ? "Demo changes cleared for this session." : "You have signed out." });
   }
@@ -311,6 +343,13 @@ export default function FinanceWorkspace({ databaseConfigured }: Props) {
     setNotice({ message: `${member.name}'s access was updated.` });
   }
 
+  async function updateOrganization(profile: OrganizationProfilePayload) {
+    if (!databaseConfigured || !profile.id) throw new Error("Organization profile changes require a configured portal.");
+    await apiRequest(`/api/organizations/${profile.id}`, { method: "PATCH", body: JSON.stringify(profile) });
+    await refreshWorkspace();
+    setNotice({ message: "Organization profile saved." });
+  }
+
   async function downloadFile(file: SourceFile) {
     const response = await fetch(`/api/source-files/${file.id}`, { cache: "no-store" });
     if (!response.ok) throw new Error("The source document could not be downloaded.");
@@ -329,6 +368,7 @@ export default function FinanceWorkspace({ databaseConfigured }: Props) {
 
   if (databaseConfigured && !authReady) return <div className="login-screen"><div className="login-form-side"><div className="muted">Checking sign-in…</div></div></div>;
   if (databaseConfigured && !user) return <LoginScreen onLogin={login} />;
+  if (databaseConfigured && user?.platformAdmin && !user.organizationId) return <PortalChooser user={user} organizations={organizations} onSelect={selectOrganization} onCreate={createOrganization} onLogout={logout} />;
   const currentUser = user ?? demoWorkspace.users[0];
   const titleByView: Record<ViewKey, string> = { overview: "Finance overview", reconciliations: "Reconciliation history", imports: "Statement imports", exceptions: "Review workbench", reports: "Period reports", audit: "Audit trail", team: "Finance administration" };
   const viewComponent = (() => {
@@ -339,17 +379,18 @@ export default function FinanceWorkspace({ databaseConfigured }: Props) {
     if (view === "exceptions") return <ExceptionsView {...base} selectedReconciliationId={selectedReconciliationId} onAutoMatch={autoMatch} onManualMatch={manualMatch} onWorkflow={updateWorkflow} />;
     if (view === "reports") return <ReportsView {...base} onExport={exportReport} />;
     if (view === "audit") return <AuditView {...base} />;
-    return <TeamView {...base} onCreateUser={createUser} onCreateAccount={createAccount} onUpdateUser={updateUser} />;
+    return <TeamView {...base} onCreateUser={createUser} onCreateAccount={createAccount} onUpdateUser={updateUser} onUpdateOrganization={updateOrganization} />;
   })();
 
   return <div className="app-frame">
     <Sidebar view={view} onNavigate={changeView} data={workspace} open={mobileOpen} onClose={() => setMobileOpen(false)} currentUser={currentUser} />
     <main className="main-shell">
-      <header className="topbar"><div className="topbar-left"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={() => setMobileOpen(true)}><Menu size={17} /></button><div className="breadcrumb">DDIN Finance <ChevronRight size={11} style={{ verticalAlign: "-2px" }} /> <strong>{titleByView[view]}</strong></div></div><div className="topbar-right">
+      <header className="topbar"><div className="topbar-left"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={() => setMobileOpen(true)}><Menu size={17} /></button><div className="breadcrumb">{workspace.organization.name} Finance <ChevronRight size={11} style={{ verticalAlign: "-2px" }} /> <strong>{titleByView[view]}</strong></div></div><div className="topbar-right">
         <label className="global-search"><Search size={13} /><input aria-label="Search workspace" placeholder="Search accounts or periods" value={searchText} onChange={(event) => setSearchText(event.target.value)} onKeyDown={(event) => event.key === "Enter" && changeView("reconciliations")} /></label>
         <span className="top-date">{new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(new Date())}</span><span className="topbar-separator" />
         {isDemo && <span className="mode-chip"><span style={{ width: 5, height: 5, borderRadius: 4, background: "#ce8a31" }} /> Demo data</span>}
         {isDemo ? <select className="role-select" aria-label="Demo persona" value={currentUser.id} onChange={(event) => { const next = workspace.users.find((item) => item.id === event.target.value); if (next) setUser(next); }}><option value={demoWorkspace.users[0].id}>Aline · Preparer</option><option value={demoWorkspace.users[1].id}>Eric · Reviewer</option><option value={demoWorkspace.users[2].id}>Joseph · Admin</option><option value={demoWorkspace.users[3].id}>Claudine · Auditor</option></select> : <div className="topbar-user"><span className="avatar" style={{ width: 27, height: 27 }}>{initials(currentUser.name)}</span><span className="topbar-user-name">{currentUser.name}</span></div>}
+        {databaseConfigured && user?.platformAdmin && <button className="btn btn-small" onClick={() => void switchToPortalDirectory()}>Portals</button>}
         {databaseConfigured && <button className="icon-button" title="Sign out" onClick={() => void logout()}><LogOut size={14} /></button>}
       </div></header>
       <section className="content">{viewComponent}</section>

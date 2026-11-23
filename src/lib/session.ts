@@ -6,7 +6,7 @@ import type { UserRole } from "@/lib/types";
 export const SESSION_COOKIE = "ddin_finance_session";
 const SESSION_SECONDS = 60 * 60 * 8;
 
-export type SessionUser = { id: string; name: string; email: string; role: UserRole };
+export type SessionUser = { id: string; name: string; email: string; role: UserRole; platformAdmin: boolean; organizationId: string | null };
 
 function key() {
   const secret = process.env.AUTH_SECRET;
@@ -16,8 +16,8 @@ function key() {
   return new TextEncoder().encode(secret);
 }
 
-export async function createSession(user: SessionUser) {
-  const token = await new SignJWT({ ...user })
+export async function createSession(user: SessionUser, organizationId: string | null = user.organizationId) {
+  const token = await new SignJWT({ ...user, organizationId })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(user.id)
     .setIssuedAt()
@@ -43,12 +43,22 @@ export async function currentUser(): Promise<SessionUser | null> {
     const token = (await cookies()).get(SESSION_COOKIE)?.value;
     if (!token) return null;
     const { payload } = await jwtVerify(token, key());
-    if (typeof payload.sub !== "string" || typeof payload.email !== "string" || typeof payload.name !== "string") return null;
+    if (typeof payload.sub !== "string") return null;
     const sql = getDb();
-    const [user] = await sql`SELECT id::text, email, name, role::text, active FROM app_users WHERE id = ${payload.sub}`;
+    const [user] = await sql`SELECT id::text, email, username, name, role::text, active, platform_admin, organization_id::text
+      FROM app_users WHERE id = ${payload.sub}`;
     if (!user || !user.active) return null;
     if (!["admin", "preparer", "reviewer", "auditor"].includes(String(user.role))) return null;
-    return { id: String(user.id), email: String(user.email), name: String(user.name), role: user.role as UserRole };
+    const platformAdmin = Boolean(user.platform_admin);
+    const organizationId = platformAdmin
+      ? typeof payload.organizationId === "string" ? payload.organizationId : null
+      : user.organization_id ? String(user.organization_id) : null;
+    if (!platformAdmin && !organizationId) return null;
+    if (organizationId) {
+      const [organization] = await sql`SELECT id FROM organizations WHERE id = ${organizationId} AND active = TRUE`;
+      if (!organization) return null;
+    }
+    return { id: String(user.id), email: String(user.email), name: String(user.name), role: platformAdmin ? "admin" : user.role as UserRole, platformAdmin, organizationId };
   } catch {
     return null;
   }
@@ -57,6 +67,14 @@ export async function currentUser(): Promise<SessionUser | null> {
 export async function requireUser(roles?: UserRole[]) {
   const user = await currentUser();
   if (!user) throw Object.assign(new Error("Sign in to continue."), { status: 401 });
+  if (!user.organizationId) throw Object.assign(new Error("Choose an organization portal first."), { status: 409 });
   if (roles?.length && !roles.includes(user.role)) throw Object.assign(new Error("Your role cannot perform this action."), { status: 403 });
+  return user;
+}
+
+export async function requirePlatformAdmin() {
+  const user = await currentUser();
+  if (!user) throw Object.assign(new Error("Sign in to continue."), { status: 401 });
+  if (!user.platformAdmin) throw Object.assign(new Error("Platform administrator access is required."), { status: 403 });
   return user;
 }

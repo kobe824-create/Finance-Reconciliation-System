@@ -17,7 +17,26 @@ export type AppUser = {
   email: string;
   role: UserRole;
   active: boolean;
+  platformAdmin?: boolean;
+  organizationId?: string | null;
 };
+
+export type OrganizationProfile = {
+  id: string;
+  slug: string;
+  name: string;
+  legalName?: string;
+  tagline?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  province?: string;
+  postalCode?: string;
+  country?: string;
+  logoUrl?: string;
+};
+
+export type OrganizationSummary = OrganizationProfile & { active: boolean };
 
 export type Reconciliation = {
   id: string;
@@ -81,6 +100,7 @@ export type AuditEntry = {
 };
 
 export type WorkspaceData = {
+  organization: OrganizationProfile;
   accounts: Account[];
   users: AppUser[];
   reconciliations: Reconciliation[];

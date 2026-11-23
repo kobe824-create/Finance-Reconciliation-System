@@ -1,5 +1,3 @@
-BEGIN;
-
 CREATE TYPE user_role AS ENUM ('admin', 'preparer', 'reviewer', 'auditor');
 CREATE TYPE reconciliation_status AS ENUM ('draft', 'in_review', 'approved', 'needs_attention');
 CREATE TYPE transaction_source AS ENUM ('bank', 'ledger');
@@ -118,5 +116,3 @@ END;
 $$;
 CREATE TRIGGER audit_log_no_update BEFORE UPDATE OR DELETE ON audit_log
   FOR EACH ROW EXECUTE FUNCTION prevent_audit_mutation();
-
-COMMIT;

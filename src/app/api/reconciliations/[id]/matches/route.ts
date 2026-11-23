@@ -13,7 +13,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const body = await requestJson<MatchBody>(request);
     if (!body.bankTransactionId || !body.ledgerTransactionId || body.bankTransactionId === body.ledgerTransactionId) throw Object.assign(new Error("Choose one bank row and one ledger row."), { status: 400 });
     const sql = getDb();
-    const [recon] = await sql`SELECT status::text FROM reconciliations WHERE id = ${id}`;
+    const [recon] = await sql`SELECT r.status::text FROM reconciliations r JOIN accounts a ON a.id = r.account_id WHERE r.id = ${id} AND a.organization_id = ${actor.organizationId}`;
     if (!recon) throw Object.assign(new Error("Reconciliation not found."), { status: 404 });
     if (recon.status === "approved" || recon.status === "in_review") throw Object.assign(new Error("This reconciliation is locked while it is in review or approved."), { status: 409 });
     const transactions = await sql`SELECT id::text, source::text, reconciliation_id::text FROM transactions WHERE id IN (${body.bankTransactionId}, ${body.ledgerTransactionId})`;
@@ -27,7 +27,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       sql`INSERT INTO match_sets (id, reconciliation_id, bank_transaction_id, ledger_transaction_id, match_method, matched_by)
         VALUES (${matchId}, ${id}, ${body.bankTransactionId}, ${body.ledgerTransactionId}, 'manual', ${actor.id})`,
       sql`UPDATE reconciliations SET updated_at = now() WHERE id = ${id}`,
-      auditStatement(sql, actor.id, "Manually matched transactions", "reconciliation", id, { matchId, bankTransactionId: body.bankTransactionId, ledgerTransactionId: body.ledgerTransactionId }),
+      auditStatement(sql, actor.id, "Manually matched transactions", "reconciliation", id, { matchId, bankTransactionId: body.bankTransactionId, ledgerTransactionId: body.ledgerTransactionId }, actor.organizationId),
     ]);
     return Response.json({ matchId }, { status: 201 });
   } catch (error) {

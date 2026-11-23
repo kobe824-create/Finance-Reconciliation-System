@@ -38,7 +38,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const sha256 = createHash("sha256").update(content).digest("hex");
     if (body.sha256 && body.sha256 !== sha256) throw Object.assign(new Error("The file checksum did not match. Please retry the import."), { status: 400 });
     const sql = getDb();
-    const [recon] = await sql`SELECT r.status::text, a.currency FROM reconciliations r JOIN accounts a ON a.id = r.account_id WHERE r.id = ${reconciliationId}`;
+    const [recon] = await sql`SELECT r.status::text, a.currency FROM reconciliations r JOIN accounts a ON a.id = r.account_id WHERE r.id = ${reconciliationId} AND a.organization_id = ${actor.organizationId}`;
     if (!recon) throw Object.assign(new Error("Reconciliation not found."), { status: 404 });
     if (recon.status === "approved" || recon.status === "in_review") throw Object.assign(new Error("This reconciliation is locked while it is in review or approved."), { status: 409 });
     const currency = String(body.currency ?? recon.currency).trim().toUpperCase();
@@ -49,7 +49,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     await sql.transaction([
       sql`INSERT INTO source_files (id, reconciliation_id, file_name, source, content_type, file_size, sha256, row_count, original_content, uploaded_by)
         VALUES (${sourceFileId}, ${reconciliationId}, ${fileName}, ${source}, ${String(body.contentType ?? "application/octet-stream").slice(0, 100)}, ${content.length}, ${sha256}, ${rowCount}, decode(${contentBase64}, 'base64'), ${actor.id})`,
-      auditStatement(sql, actor.id, "Added statement file", "source_file", sourceFileId, { reconciliationId, fileName, source, rows: rowCount, bytes: content.length, sha256 }),
+      auditStatement(sql, actor.id, "Added statement file", "source_file", sourceFileId, { reconciliationId, fileName, source, rows: rowCount, bytes: content.length, sha256 }, actor.organizationId),
     ]);
     return Response.json({ sourceFileId, rowsExpected: rowCount }, { status: 201 });
   } catch (error) {

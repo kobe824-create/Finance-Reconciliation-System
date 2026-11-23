@@ -16,19 +16,19 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (id === actor.id && (body.active === false || (body.role !== undefined && body.role !== "admin"))) throw Object.assign(new Error("You cannot remove or reduce your own administrator access."), { status: 400 });
     if (body.role === undefined && body.active === undefined) throw Object.assign(new Error("No user changes were provided."), { status: 400 });
     const sql = getDb();
-    const [current] = await sql`SELECT role::text, active FROM app_users WHERE id = ${id}`;
+    const [current] = await sql`SELECT role::text, active FROM app_users WHERE id = ${id} AND organization_id = ${actor.organizationId} AND platform_admin = FALSE`;
     if (!current) throw Object.assign(new Error("User not found."), { status: 404 });
     const removesAdmin = current.role === "admin" && current.active && (body.active === false || body.role !== undefined && body.role !== "admin");
     if (removesAdmin) {
-      const [admins] = await sql`SELECT count(*)::int AS count FROM app_users WHERE role = 'admin' AND active = TRUE`;
+      const [admins] = await sql`SELECT count(*)::int AS count FROM app_users WHERE organization_id = ${actor.organizationId} AND platform_admin = FALSE AND role = 'admin' AND active = TRUE`;
       if (Number(admins.count) <= 1) throw Object.assign(new Error("Keep at least one active administrator."), { status: 409 });
     }
     const nextRole = body.role ?? current.role;
     const nextActive = body.active ?? Boolean(current.active);
     const [updatedRows] = await sql.transaction([
-      sql`UPDATE app_users SET role = COALESCE(${body.role ?? null}::user_role, role), active = COALESCE(${body.active ?? null}, active) WHERE id = ${id}
+      sql`UPDATE app_users SET role = COALESCE(${body.role ?? null}::user_role, role), active = COALESCE(${body.active ?? null}, active) WHERE id = ${id} AND organization_id = ${actor.organizationId} AND platform_admin = FALSE
         RETURNING id::text, name, email, role::text, active`,
-      auditStatement(sql, actor.id, "Updated user access", "user", id, { role: nextRole, active: nextActive }),
+      auditStatement(sql, actor.id, "Updated user access", "user", id, { role: nextRole, active: nextActive }, actor.organizationId),
     ]);
     const rows = updatedRows[0];
     return Response.json({ user: { id: String(rows.id), name: String(rows.name), email: String(rows.email), role: rows.role as UserRole, active: Boolean(rows.active) } });

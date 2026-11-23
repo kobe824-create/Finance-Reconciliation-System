@@ -11,7 +11,7 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
     const actor = await requireUser(["admin", "preparer"]);
     const { id } = await context.params;
     const sql = getDb();
-    const [recon] = await sql`SELECT status::text FROM reconciliations WHERE id = ${id}`;
+    const [recon] = await sql`SELECT r.status::text FROM reconciliations r JOIN accounts a ON a.id = r.account_id WHERE r.id = ${id} AND a.organization_id = ${actor.organizationId}`;
     if (!recon) throw Object.assign(new Error("Reconciliation not found."), { status: 404 });
     if (recon.status === "approved" || recon.status === "in_review") throw Object.assign(new Error("This reconciliation is locked while it is in review or approved."), { status: 409 });
     const rows = await sql`SELECT t.id::text, t.reconciliation_id::text, t.source_file_id::text, t.source::text,
@@ -34,7 +34,7 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
           FROM jsonb_to_recordset(${pairs}::jsonb) AS pair(bank_id text, ledger_id text, match_method text)
           ON CONFLICT DO NOTHING RETURNING id`,
         sql`UPDATE reconciliations SET updated_at = now() WHERE id = ${id}`,
-        auditStatement(sql, actor.id, "Auto-matched transactions", "reconciliation", id, { proposedCount: result.matches.length, unmatchedBank: result.unmatchedBank.length, unmatchedLedger: result.unmatchedLedger.length }),
+        auditStatement(sql, actor.id, "Auto-matched transactions", "reconciliation", id, { proposedCount: result.matches.length, unmatchedBank: result.unmatchedBank.length, unmatchedLedger: result.unmatchedLedger.length }, actor.organizationId),
       ]);
       inserted = insertedRows.length;
     }

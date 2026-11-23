@@ -11,11 +11,12 @@ const dateOnly = (value: unknown) => s(value).slice(0, 10);
 
 export async function GET() {
   try {
-    await requireUser();
+    const actor = await requireUser();
     const sql = getDb();
-    const [accountRows, userRows, reconRows, txnRows, fileRows, auditRows] = await Promise.all([
-      sql`SELECT id::text, name, institution, currency, account_number_masked, active FROM accounts ORDER BY name`,
-      sql`SELECT id::text, name, email, role::text, active FROM app_users ORDER BY name`,
+    const [organizationRows, accountRows, userRows, reconRows, txnRows, fileRows, auditRows] = await Promise.all([
+      sql`SELECT id::text, slug, name, legal_name, tagline, address_line1, address_line2, city, province, postal_code, country, (logo_content IS NOT NULL) AS has_logo FROM organizations WHERE id = ${actor.organizationId} AND active = TRUE`,
+      sql`SELECT id::text, name, institution, currency, account_number_masked, active FROM accounts WHERE organization_id = ${actor.organizationId} ORDER BY name`,
+      sql`SELECT id::text, name, email, role::text, active FROM app_users WHERE organization_id = ${actor.organizationId} AND platform_admin = FALSE ORDER BY name`,
       sql`SELECT r.id::text, r.account_id::text, a.name AS account_name, a.institution, a.currency,
                  r.period_start::text, r.period_end::text, r.statement_balance::text, r.book_balance::text,
                  r.status::text, r.preparer_id::text, p.name AS preparer_name, r.reviewer_id::text, r.reviewer_note,
@@ -29,23 +30,38 @@ export async function GET() {
           LEFT JOIN app_users reviewer ON reviewer.id = r.reviewer_id
           LEFT JOIN transactions t ON t.reconciliation_id = r.id
           LEFT JOIN match_sets m ON m.reconciliation_id = r.id AND (m.bank_transaction_id = t.id OR m.ledger_transaction_id = t.id)
+          WHERE a.organization_id = ${actor.organizationId}
           GROUP BY r.id, a.id, p.id, reviewer.id
           ORDER BY r.period_end DESC, r.updated_at DESC`,
       sql`SELECT t.id::text, t.reconciliation_id::text, t.source_file_id::text, t.source::text,
                  t.transaction_date::text, t.description, t.reference, t.amount::text, t.currency,
                  m.id::text AS match_id
           FROM transactions t
+          JOIN reconciliations r ON r.id = t.reconciliation_id
+          JOIN accounts a ON a.id = r.account_id
           LEFT JOIN match_sets m ON m.bank_transaction_id = t.id OR m.ledger_transaction_id = t.id
+          WHERE a.organization_id = ${actor.organizationId}
           ORDER BY t.transaction_date DESC, t.created_at DESC LIMIT 5000`,
       sql`SELECT f.id::text, f.reconciliation_id::text, f.file_name, f.source::text, f.row_count,
                  f.file_size, f.sha256, f.imported_at, f.uploaded_by::text, f.import_complete
-          FROM source_files f ORDER BY f.imported_at DESC LIMIT 1000`,
+          FROM source_files f JOIN reconciliations r ON r.id = f.reconciliation_id JOIN accounts a ON a.id = r.account_id
+          WHERE a.organization_id = ${actor.organizationId} ORDER BY f.imported_at DESC LIMIT 1000`,
       sql`SELECT l.id::text, l.actor_id::text, u.name AS actor_name, l.action, l.entity_type,
                  l.entity_id, l.details, l.created_at
-          FROM audit_log l JOIN app_users u ON u.id = l.actor_id ORDER BY l.created_at DESC LIMIT 500`,
+          FROM audit_log l JOIN app_users u ON u.id = l.actor_id WHERE l.organization_id = ${actor.organizationId} ORDER BY l.created_at DESC LIMIT 500`,
     ]);
 
+    const organizationRow = organizationRows[0];
+    if (!organizationRow) throw Object.assign(new Error("The selected organization profile is unavailable."), { status: 404 });
+
     const data: WorkspaceData = {
+      organization: {
+        id: s(organizationRow.id), slug: s(organizationRow.slug), name: s(organizationRow.name),
+        legalName: s(organizationRow.legal_name), tagline: s(organizationRow.tagline),
+        addressLine1: s(organizationRow.address_line1), addressLine2: s(organizationRow.address_line2),
+        city: s(organizationRow.city), province: s(organizationRow.province), postalCode: s(organizationRow.postal_code), country: s(organizationRow.country),
+        logoUrl: organizationRow.has_logo ? `/api/organizations/${s(organizationRow.id)}/logo` : undefined,
+      },
       accounts: accountRows.map((row) => ({ id: s(row.id), name: s(row.name), institution: s(row.institution), currency: s(row.currency).trim(), accountNumber: s(row.account_number_masked), active: Boolean(row.active) })),
       users: userRows.map((row) => ({ id: s(row.id), name: s(row.name), email: s(row.email), role: row.role as WorkspaceData["users"][number]["role"], active: Boolean(row.active) })),
       reconciliations: reconRows.map((row) => {

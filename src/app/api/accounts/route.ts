@@ -21,8 +21,8 @@ export async function POST(request: Request) {
     const sql = getDb();
     const id = randomUUID();
     await sql.transaction([
-      sql`INSERT INTO accounts (id, name, institution, currency, account_number_masked) VALUES (${id}, ${name}, ${institution}, ${currency}, ${`•••• ${accountNumber}`})`,
-      auditStatement(sql, actor.id, "Created account", "account", id, { name, institution, currency }),
+      sql`INSERT INTO accounts (id, organization_id, name, institution, currency, account_number_masked) VALUES (${id}, ${actor.organizationId}, ${name}, ${institution}, ${currency}, ${`•••• ${accountNumber}`})`,
+      auditStatement(sql, actor.id, "Created account", "account", id, { name, institution, currency }, actor.organizationId),
     ]);
     return Response.json({ account: { id, name, institution, currency, accountNumber: `•••• ${accountNumber}`, active: true } }, { status: 201 });
   } catch (error) {

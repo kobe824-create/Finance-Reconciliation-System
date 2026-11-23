@@ -1,9 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Activity, AlertCircle, ArrowDownToLine, ArrowRight, ArrowUpRight, Banknote, BookOpenCheck, Check, CheckCircle2, ChevronDown, ClipboardCheck, FileDown, FileSearch, FileText, Filter, LockKeyhole, Plus, Printer, RefreshCw, Search, ShieldCheck, Sparkles, Users, WalletCards, X } from "lucide-react";
-import type { AppUser, Reconciliation, ReconciliationStatus, SourceFile, StatementTransaction, UserRole, WorkspaceData } from "@/lib/types";
+import type { AppUser, OrganizationProfile, Reconciliation, ReconciliationStatus, SourceFile, StatementTransaction, UserRole, WorkspaceData } from "@/lib/types";
 
 export type ViewKey = "overview" | "reconciliations" | "imports" | "exceptions" | "reports" | "audit" | "team";
 export type WorkflowAction = "submit" | "approve" | "return";
@@ -16,7 +17,8 @@ type ExceptionProps = BaseProps & { selectedReconciliationId?: string; onAutoMat
 type FileProps = BaseProps & { databaseConfigured: boolean; onDownloadFile: (file: SourceFile) => void };
 type ReportProps = BaseProps & { onExport: (rows: Reconciliation[]) => void };
 type AuditProps = { data: WorkspaceData; user: AppUser; onOpenReconciliation: (id: string) => void };
-type TeamProps = { data: WorkspaceData; user: AppUser; onCreateUser: (user: CreateUserPayload) => Promise<void>; onCreateAccount: (account: CreateAccountPayload) => Promise<void>; onUpdateUser: (user: AppUser) => Promise<void> };
+export type OrganizationProfilePayload = Partial<OrganizationProfile> & { logoBase64?: string; logoContentType?: string; logoFileName?: string };
+type TeamProps = { data: WorkspaceData; user: AppUser; onCreateUser: (user: CreateUserPayload) => Promise<void>; onCreateAccount: (account: CreateAccountPayload) => Promise<void>; onUpdateUser: (user: AppUser) => Promise<void>; onUpdateOrganization: (organization: OrganizationProfilePayload) => Promise<void> };
 
 const currency = (amount: number, code = "RWF") => {
   try { return new Intl.NumberFormat("en-RW", { style: "currency", currency: code, maximumFractionDigits: code === "RWF" ? 0 : 2 }).format(amount); }
@@ -80,7 +82,7 @@ export function OverviewView({ data, user, onOpenReconciliation, onNewImport }: 
   const greeting = new Date().getHours() < 12 ? "Good morning" : new Date().getHours() < 17 ? "Good afternoon" : "Good evening";
   const currentDate = new Intl.DateTimeFormat("en-GB", { dateStyle: "full" }).format(new Date());
   return <>
-    <Heading eyebrow="Finance workspace · DDIN" title={`${greeting}, ${user.name.split(" ")[0]}`} description={`Here is the close activity as of ${currentDate}.`} actions={<><button className="btn" onClick={() => onOpenReconciliation(recent[0]?.id ?? "")} disabled={!recent.length}><FileSearch size={14} /> View history</button><button className="btn btn-primary" onClick={onNewImport}><Plus size={14} /> New reconciliation</button></>} />
+    <Heading eyebrow={`Finance workspace · ${data.organization.name}`} title={`${greeting}, ${user.name.split(" ")[0]}`} description={`Here is the close activity as of ${currentDate}.`} actions={<><button className="btn" onClick={() => onOpenReconciliation(recent[0]?.id ?? "")} disabled={!recent.length}><FileSearch size={14} /> View history</button><button className="btn btn-primary" onClick={onNewImport}><Plus size={14} /> New reconciliation</button></>} />
     <div className="stats-grid">
       <div className="card stat-card"><div className="stat-top"><span>Active accounts</span><span className="stat-icon"><WalletCards size={14} /></span></div><div className="stat-value">{String(activeAccounts).padStart(2, "0")}</div><div className="stat-foot">Configured for monthly close</div></div>
       <div className="card stat-card"><div className="stat-top"><span>Matched transactions</span><span className="stat-icon"><BookOpenCheck size={14} /></span></div><div className="stat-value">{matched.toLocaleString()}</div><div className="stat-foot"><span className="positive">Across the available periods</span></div></div>
@@ -110,8 +112,8 @@ export function OverviewView({ data, user, onOpenReconciliation, onNewImport }: 
         </div>)}</div>
       </section>
     </div>
-    <section className="card section-card"><SectionHeading title="Recent reconciliations" description="Latest statement periods across DDIN accounts" action={<button className="link-button" onClick={() => onOpenReconciliation(recent[0]?.id ?? "")}>All reconciliations <ArrowRight size={11} /></button>} /><SummaryTable rows={recent.slice(0, 5)} onOpen={onOpenReconciliation} compact /></section>
-    <div className="table-summary"><span><strong>Control reminder</strong> · Reconciliations should be reviewed by someone other than the preparer.</span><span>DDIN Finance · Internal</span></div>
+    <section className="card section-card"><SectionHeading title="Recent reconciliations" description={`Latest statement periods across ${data.organization.name} accounts`} action={<button className="link-button" onClick={() => onOpenReconciliation(recent[0]?.id ?? "")}>All reconciliations <ArrowRight size={11} /></button>} /><SummaryTable rows={recent.slice(0, 5)} onOpen={onOpenReconciliation} compact /></section>
+    <div className="table-summary"><span><strong>Control reminder</strong> · Reconciliations should be reviewed by someone other than the preparer.</span><span>{data.organization.name} Finance · Internal</span></div>
   </>;
 }
 
@@ -126,7 +128,7 @@ export function ReconciliationsView({ data, user, onOpenReconciliation, onNewImp
     return (!effectiveQuery || text.includes(effectiveQuery.toLowerCase())) && (status === "all" || recon.status === status) && (accountId === "all" || recon.accountId === accountId);
   }).sort((a, b) => order === "period_asc" ? a.periodEnd.localeCompare(b.periodEnd) : order === "difference_desc" ? Math.abs(b.difference) - Math.abs(a.difference) : b.periodEnd.localeCompare(a.periodEnd)), [data.reconciliations, effectiveQuery, status, accountId, order]);
   return <>
-    <Heading eyebrow="Close management" title="Reconciliations" description="Search and review statement periods across the DDIN finance team." actions={<button className="btn btn-primary" onClick={onNewImport}><Plus size={14} /> New reconciliation</button>} />
+    <Heading eyebrow="Close management" title="Reconciliations" description={`Search and review statement periods across the ${data.organization.name} finance team.`} actions={<button className="btn btn-primary" onClick={onNewImport}><Plus size={14} /> New reconciliation</button>} />
     <section className="card section-card">
       <SectionHeading title="Reconciliation history" description={`${rows.length} of ${data.reconciliations.length} periods`} action={<div className="filters"><label className="global-search" style={{ width: 185, height: 32 }}><Search size={13} /><input aria-label="Search reconciliation history" placeholder="Search history" value={searchText || query} onChange={(event) => setQuery(event.target.value)} /></label><select className="filter-select" aria-label="Filter by status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All statuses</option>{Object.entries(humanStatus).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select><select className="filter-select" aria-label="Filter by account" value={accountId} onChange={(event) => setAccountId(event.target.value)}><option value="all">All accounts</option>{data.accounts.map((account) => <option value={account.id} key={account.id}>{account.name}</option>)}</select><select className="filter-select" aria-label="Sort history" value={order} onChange={(event) => setOrder(event.target.value)}><option value="period_desc">Newest period</option><option value="period_asc">Oldest period</option><option value="difference_desc">Largest variance</option></select></div>} />
       <SummaryTable rows={rows} onOpen={onOpenReconciliation} />
@@ -155,7 +157,7 @@ export function ImportsView({ data, user, onOpenReconciliation, onNewImport, dat
       </tbody></table></div>
       <div className="pagination"><span>Uploaded statement sources remain linked to their reconciliation.</span><span>Limit: 2.5 MB per source file</span></div>
     </section>
-    <div className="table-summary"><span><strong>Formats:</strong> CSV, Excel, and selectable-text PDF.</span><span>Source documents are available only to signed-in DDIN users.</span></div>
+    <div className="table-summary"><span><strong>Formats:</strong> CSV, Excel, and selectable-text PDF.</span><span>Source documents are available only to signed-in {data.organization.name} users.</span></div>
   </>;
 }
 
@@ -280,9 +282,9 @@ export function ReportsView({ data, user, onOpenReconciliation, onNewImport, onE
         {byAccount.map(({ account, latest, rows: periodCount, open: accountOpen, difference }) => latest && <tr key={account.id}><td><div className="primary-cell">{account.name}</div><div className="secondary-cell">{account.institution}</div></td><td>{monthLabel(latest.periodEnd)}</td><td><StatusBadge status={latest.status} /></td><td className="amount-cell">{currency(latest.statementBalance, account.currency)}</td><td>{periodCount}</td><td>{accountOpen}</td><td className="amount-cell">{currency(difference, account.currency)}</td><td><button className="table-action" onClick={() => onOpenReconciliation(latest.id)}>Open period</button></td></tr>)}
         {!byAccount.length && <tr><td colSpan={8}><div className="empty-state"><strong>No period data in this range</strong>Change the report dates or create a new reconciliation.</div></td></tr>}
       </tbody></table></div>
-      <div className="pagination"><span>Report prepared {new Date().toLocaleDateString("en-GB", { dateStyle: "medium" })}</span><span>Confidential · DDIN Finance</span></div>
+      <div className="pagination"><span>Report prepared {new Date().toLocaleDateString("en-GB", { dateStyle: "medium" })}</span><span>Confidential · {data.organization.name} Finance</span></div>
     </section>
-    <div className="table-summary"><span><strong>Approval control:</strong> a reviewer cannot approve their own preparation.</span><span>Source: retained DDIN reconciliation records.</span></div>
+    <div className="table-summary"><span><strong>Approval control:</strong> a reviewer cannot approve their own preparation.</span><span>Source: retained {data.organization.name} reconciliation records.</span></div>
   </>;
 }
 
@@ -307,7 +309,7 @@ export function AuditView({ data, user, onOpenReconciliation }: AuditProps) {
   </>;
 }
 
-export function TeamView({ data, user, onCreateUser, onCreateAccount, onUpdateUser }: TeamProps) {
+export function TeamView({ data, user, onCreateUser, onCreateAccount, onUpdateUser, onUpdateOrganization }: TeamProps) {
   const isAdmin = user.role === "admin";
   const [userForm, setUserForm] = useState(false);
   const [accountForm, setAccountForm] = useState(false);
@@ -322,6 +324,7 @@ export function TeamView({ data, user, onCreateUser, onCreateAccount, onUpdateUs
   const [institution, setInstitution] = useState("");
   const [accountCurrency, setAccountCurrency] = useState("RWF");
   const [accountDigits, setAccountDigits] = useState("");
+  const [profile, setProfile] = useState<OrganizationProfilePayload>(data.organization);
 
   async function submitUser(event: FormEvent) {
     event.preventDefault(); setSaving(true); setError(""); setMessage("");
@@ -335,11 +338,35 @@ export function TeamView({ data, user, onCreateUser, onCreateAccount, onUpdateUs
     catch (cause) { setError(cause instanceof Error ? cause.message : "The account could not be added."); }
     finally { setSaving(false); }
   }
+  async function submitProfile(event: FormEvent) {
+    event.preventDefault(); setSaving(true); setError(""); setMessage("");
+    try { await onUpdateOrganization(profile); setMessage("Organization profile saved."); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "The organization profile could not be saved."); }
+    finally { setSaving(false); }
+  }
+  async function selectProfileLogo(file?: File) {
+    if (!file) return;
+    if (file.size > 1_048_576) { setError("Company logos are limited to 1 MB."); return; }
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+      reader.onerror = () => reject(new Error("The logo file could not be read."));
+      reader.readAsDataURL(file);
+    });
+    setProfile((previous) => ({ ...previous, logoBase64: base64, logoContentType: file.type, logoFileName: file.name }));
+  }
 
   return <>
-    <Heading eyebrow="Access and accounts" title="Team & settings" description="Manage DDIN users, assigned roles, and bank account records." actions={isAdmin ? <><button className="btn" onClick={() => setAccountForm(true)}><Plus size={13} /> Add account</button><button className="btn btn-primary" onClick={() => setUserForm(true)}><Users size={13} /> Add user</button></> : <span className="mode-chip"><LockKeyhole size={11} /> View only</span>} />
+    <Heading eyebrow="Access and accounts" title="Team & settings" description={`Manage ${data.organization.name} profile, finance users, and bank accounts.`} actions={isAdmin ? <><button className="btn" onClick={() => setAccountForm(true)}><Plus size={13} /> Add account</button><button className="btn btn-primary" onClick={() => setUserForm(true)}><Users size={13} /> Add user</button></> : <span className="mode-chip"><LockKeyhole size={11} /> View only</span>} />
     {message && <div className="callout" style={{ marginBottom: 13 }}><CheckCircle2 size={15} />{message}</div>}{error && <div className="callout warning" style={{ marginBottom: 13 }}><AlertCircle size={15} />{error}</div>}
     <div className="team-grid">
+      <section className="card section-card organization-profile-card"><SectionHeading title="Organization profile" description="This information identifies the selected finance portal." action={<span className="source-pill">{data.organization.slug}</span>} />
+        <form className="profile-form" onSubmit={submitProfile}>
+          <div className="profile-logo-row"><div className="profile-logo-preview">{data.organization.logoUrl && !profile.logoBase64 ? <Image src={data.organization.logoUrl} alt={`${data.organization.name} logo`} width={160} height={160} unoptimized /> : profile.logoBase64 ? <Image src={`data:${profile.logoContentType};base64,${profile.logoBase64}`} alt="Selected company logo" width={160} height={160} unoptimized /> : <span>{initials(data.organization.name)}</span>}</div><div className="field"><label htmlFor="organization-logo">Company logo</label><input id="organization-logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void selectProfileLogo(event.target.files?.[0]).catch((cause) => setError(cause instanceof Error ? cause.message : "The logo could not be read."))} /><span className="field-help">PNG, JPEG, or WebP. Maximum 1 MB.</span></div></div>
+          <div className="field-grid"><div className="field"><label htmlFor="org-name">Display name</label><input id="org-name" value={profile.name ?? ""} onChange={(event) => setProfile((old) => ({ ...old, name: event.target.value }))} maxLength={120} required /></div><div className="field"><label htmlFor="org-legal-name">Legal name</label><input id="org-legal-name" value={profile.legalName ?? ""} onChange={(event) => setProfile((old) => ({ ...old, legalName: event.target.value }))} maxLength={160} /></div><div className="field full"><label htmlFor="org-tagline">Tagline</label><input id="org-tagline" value={profile.tagline ?? ""} onChange={(event) => setProfile((old) => ({ ...old, tagline: event.target.value }))} maxLength={180} /></div><div className="field full"><label htmlFor="org-address-1">Address</label><input id="org-address-1" value={profile.addressLine1 ?? ""} onChange={(event) => setProfile((old) => ({ ...old, addressLine1: event.target.value }))} maxLength={180} /></div><div className="field full"><label htmlFor="org-address-2">Address line 2</label><input id="org-address-2" value={profile.addressLine2 ?? ""} onChange={(event) => setProfile((old) => ({ ...old, addressLine2: event.target.value }))} maxLength={180} /></div><div className="field"><label htmlFor="org-city">City</label><input id="org-city" value={profile.city ?? ""} onChange={(event) => setProfile((old) => ({ ...old, city: event.target.value }))} maxLength={100} /></div><div className="field"><label htmlFor="org-province">Province / region</label><input id="org-province" value={profile.province ?? ""} onChange={(event) => setProfile((old) => ({ ...old, province: event.target.value }))} maxLength={100} /></div><div className="field"><label htmlFor="org-postal">Postal code</label><input id="org-postal" value={profile.postalCode ?? ""} onChange={(event) => setProfile((old) => ({ ...old, postalCode: event.target.value }))} maxLength={40} /></div><div className="field"><label htmlFor="org-country">Country</label><input id="org-country" value={profile.country ?? ""} onChange={(event) => setProfile((old) => ({ ...old, country: event.target.value }))} maxLength={100} /></div></div>
+          {isAdmin && <div className="profile-form-footer"><span className="muted">Changes are recorded in the audit trail.</span><button className="btn btn-primary" disabled={saving}>{saving ? "Saving…" : "Save profile"}</button></div>}
+        </form>
+      </section>
       <section className="card section-card"><SectionHeading title="Finance team" description={`${data.users.filter((item) => item.active).length} active user accounts`} action={<span className="source-pill">Role-based access</span>} />
         <div className="table-scroll"><table style={{ minWidth: 650 }}><thead><tr><th>User</th><th>Email</th><th>Role</th><th>Status</th><th>Access</th></tr></thead><tbody>{data.users.map((member) => <tr key={member.id}>
           <td><div style={{ display: "flex", alignItems: "center", gap: 8 }}><span className="avatar" style={{ width: 27, height: 27 }}>{initials(member.name)}</span><span className="primary-cell">{member.name}{member.id === user.id ? " · You" : ""}</span></div></td><td>{member.email}</td>
@@ -354,7 +381,7 @@ export function TeamView({ data, user, onCreateUser, onCreateAccount, onUpdateUs
         </div><div className="table-summary"><span>Account identifiers are masked in the workspace.</span><span>Keep bank account access limited to finance staff.</span></div>
       </section>
     </div>
-    {userForm && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !saving && setUserForm(false)}><section className="modal narrow" role="dialog" aria-modal="true" aria-labelledby="add-user-heading"><div className="modal-head"><div><h2 id="add-user-heading">Add a finance user</h2><p>Create a named account with a single role.</p></div><button className="icon-button" aria-label="Close" onClick={() => setUserForm(false)}><X size={16} /></button></div><form onSubmit={submitUser}><div className="modal-body"><div className="field-grid"><div className="field full"><label htmlFor="user-name">Full name</label><input id="user-name" value={name} onChange={(event) => setName(event.target.value)} required /></div><div className="field full"><label htmlFor="user-email">DDIN email</label><input id="user-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></div><div className="field full"><label htmlFor="user-role">Role</label><select id="user-role" value={role} onChange={(event) => setRole(event.target.value as UserRole)}>{Object.entries(roleLabel).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></div><div className="field full"><label htmlFor="user-password">Temporary password</label><input id="user-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={12} maxLength={128} required /><span className="field-help">At least 12 characters. Deliver it privately; users will need to change it themselves.</span></div></div></div><div className="modal-footer"><span className="muted" style={{ fontSize: 9 }}>Password is stored as a one-way hash.</span><div className="modal-footer-right"><button type="button" className="btn" onClick={() => setUserForm(false)}>Cancel</button><button className="btn btn-primary" disabled={saving}>{saving ? "Adding…" : "Add user"}</button></div></div></form></section></div>}
+    {userForm && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !saving && setUserForm(false)}><section className="modal narrow" role="dialog" aria-modal="true" aria-labelledby="add-user-heading"><div className="modal-head"><div><h2 id="add-user-heading">Add a finance user</h2><p>Create a named account with a single role.</p></div><button className="icon-button" aria-label="Close" onClick={() => setUserForm(false)}><X size={16} /></button></div><form onSubmit={submitUser}><div className="modal-body"><div className="field-grid"><div className="field full"><label htmlFor="user-name">Full name</label><input id="user-name" value={name} onChange={(event) => setName(event.target.value)} required /></div><div className="field full"><label htmlFor="user-email">Company email</label><input id="user-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></div><div className="field full"><label htmlFor="user-role">Role</label><select id="user-role" value={role} onChange={(event) => setRole(event.target.value as UserRole)}>{Object.entries(roleLabel).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></div><div className="field full"><label htmlFor="user-password">Temporary password</label><input id="user-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={12} maxLength={128} required /><span className="field-help">At least 12 characters. Deliver it privately; users will need to change it themselves.</span></div></div></div><div className="modal-footer"><span className="muted" style={{ fontSize: 9 }}>Password is stored as a one-way hash.</span><div className="modal-footer-right"><button type="button" className="btn" onClick={() => setUserForm(false)}>Cancel</button><button className="btn btn-primary" disabled={saving}>{saving ? "Adding…" : "Add user"}</button></div></div></form></section></div>}
     {accountForm && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !saving && setAccountForm(false)}><section className="modal narrow" role="dialog" aria-modal="true" aria-labelledby="add-account-heading"><div className="modal-head"><div><h2 id="add-account-heading">Add a bank account</h2><p>Only a masked account identifier is saved.</p></div><button className="icon-button" aria-label="Close" onClick={() => setAccountForm(false)}><X size={16} /></button></div><form onSubmit={submitAccount}><div className="modal-body"><div className="field-grid"><div className="field full"><label htmlFor="account-name">Account name</label><input id="account-name" value={accountName} onChange={(event) => setAccountName(event.target.value)} placeholder="Operating account" required /></div><div className="field full"><label htmlFor="institution">Financial institution</label><input id="institution" value={institution} onChange={(event) => setInstitution(event.target.value)} placeholder="Bank of Kigali" required /></div><div className="field"><label htmlFor="account-currency">Currency</label><input id="account-currency" value={accountCurrency} onChange={(event) => setAccountCurrency(event.target.value.toUpperCase().slice(0, 3))} maxLength={3} required /></div><div className="field"><label htmlFor="account-number">Last 4 digits only</label><input id="account-number" inputMode="numeric" value={accountDigits} onChange={(event) => setAccountDigits(event.target.value.replace(/\D/g, "").slice(-4))} minLength={4} maxLength={4} required /></div></div></div><div className="modal-footer"><span className="muted" style={{ fontSize: 9 }}>Full account numbers are never stored.</span><div className="modal-footer-right"><button type="button" className="btn" onClick={() => setAccountForm(false)}>Cancel</button><button className="btn btn-primary" disabled={saving}>{saving ? "Adding…" : "Add account"}</button></div></div></form></section></div>}
   </>;
 }

@@ -18,7 +18,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         (SELECT count(*)::int FROM source_files f WHERE f.reconciliation_id = reconciliations.id AND f.import_complete = FALSE) AS incomplete_files,
         (SELECT count(*)::int FROM source_files f WHERE f.reconciliation_id = reconciliations.id AND f.source = 'bank') AS bank_files,
         (SELECT count(*)::int FROM source_files f WHERE f.reconciliation_id = reconciliations.id AND f.source = 'ledger') AS ledger_files
-      FROM reconciliations WHERE id = ${id}`;
+      FROM reconciliations JOIN accounts scoped_account ON scoped_account.id = reconciliations.account_id
+      WHERE reconciliations.id = ${id} AND scoped_account.organization_id = ${actor.organizationId}`;
     if (!recon) throw Object.assign(new Error("Reconciliation not found."), { status: 404 });
     if (recon.status === "approved") throw Object.assign(new Error("Approved reconciliations are locked."), { status: 409 });
 
@@ -29,7 +30,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       if (Number(recon.bank_files) < 1 || Number(recon.ledger_files) < 1) throw Object.assign(new Error("Import at least one bank statement and one ledger file before review."), { status: 409 });
       await sql.transaction([
         sql`UPDATE reconciliations SET status = 'in_review', reviewer_id = NULL, reviewer_note = NULL, updated_at = now() WHERE id = ${id}`,
-        auditStatement(sql, actor.id, "Submitted reconciliation for review", "reconciliation", id, { unmatched: Number(recon.unmatched) }),
+        auditStatement(sql, actor.id, "Submitted reconciliation for review", "reconciliation", id, { unmatched: Number(recon.unmatched) }, actor.organizationId),
       ]);
       return Response.json({ status: "in_review" });
     }
@@ -43,7 +44,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       if (Number(recon.unmatched) > 0 || Math.round(Number(recon.statement_balance) * 100) !== Math.round(Number(recon.book_balance) * 100)) throw Object.assign(new Error("Resolve all unmatched transactions and balance differences before approval."), { status: 409 });
       await sql.transaction([
         sql`UPDATE reconciliations SET status = 'approved', reviewer_id = ${actor.id}, reviewer_note = NULL, updated_at = now() WHERE id = ${id}`,
-        auditStatement(sql, actor.id, "Approved reconciliation", "reconciliation", id, {}),
+        auditStatement(sql, actor.id, "Approved reconciliation", "reconciliation", id, {}, actor.organizationId),
       ]);
       return Response.json({ status: "approved" });
     }
@@ -55,7 +56,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       if (!reviewerNote) throw Object.assign(new Error("Add a review note describing the issue."), { status: 400 });
       await sql.transaction([
         sql`UPDATE reconciliations SET status = 'needs_attention', reviewer_id = ${actor.id}, reviewer_note = ${reviewerNote}, updated_at = now() WHERE id = ${id}`,
-        auditStatement(sql, actor.id, "Returned reconciliation for changes", "reconciliation", id, { note: reviewerNote }),
+        auditStatement(sql, actor.id, "Returned reconciliation for changes", "reconciliation", id, { note: reviewerNote }, actor.organizationId),
       ]);
       return Response.json({ status: "needs_attention" });
     }
